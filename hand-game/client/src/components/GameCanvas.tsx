@@ -34,6 +34,7 @@ export function GameCanvas({ handData, onToggleFilter }: GameCanvasProps) {
         lastScoreSync: 0, // Track last synced score to avoid spamming setState
         gameOver: false,
         baseSpeed: 2, // Base vertical speed
+        trail: [] as { x: number, y: number }[]
     });
 
     // Load Sprites
@@ -158,7 +159,34 @@ export function GameCanvas({ handData, onToggleFilter }: GameCanvasProps) {
             const throttle = Math.max(0, (1 - handData.y)); // 0 to 1
             const gameSpeed = state.baseSpeed + (throttle * 10);
 
-            // 5. Draw Stars (Background)
+            // 5. Update Trail
+            state.trail.push({ x: state.playerX, y: (h - 100) / h });
+            if (state.trail.length > 20) {
+                state.trail.shift();
+            }
+
+            // 5b. Draw Trail
+            if (state.trail.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(state.trail[0].x * w, state.trail[0].y * h);
+                for (let i = 1; i < state.trail.length; i++) {
+                    // Quadratic curve for smoother trail? Or simple line
+                    ctx.lineTo(state.trail[i].x * w, state.trail[i].y * h);
+                }
+                ctx.strokeStyle = `rgba(0, 255, 204, 0.5)`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Optional: Dots
+                state.trail.forEach((pos, index) => {
+                    ctx.fillStyle = `rgba(0, 255, 204, ${index / 20})`;
+                    ctx.beginPath();
+                    ctx.arc(pos.x * w, (h - 100), 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+
+            // 6. Draw Stars (Background)
             ctx.fillStyle = 'white';
             state.stars.forEach(star => {
                 star.y += star.speed + (gameSpeed * 0.1);
@@ -321,7 +349,7 @@ export function GameCanvas({ handData, onToggleFilter }: GameCanvasProps) {
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: 'black' }}>
 
-            <button 
+            <button
                 onClick={handleBtnClick}
                 style={{
                     position: 'absolute',

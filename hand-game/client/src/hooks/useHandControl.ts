@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef,useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DynamicSmoothingAgent } from '../utils/smoother';
 
 export interface HandData {
@@ -21,11 +21,15 @@ export default function useHandControl(url: string = 'ws://localhost:8765') {
     const ws = useRef<WebSocket | null>(null);
     const reconnectTimeout = useRef<number | undefined>(undefined);
 
+    // Ref to track smoothing state without re-triggering effects or stale closures
+    const isSmoothingEnabledRef = useRef(true);
+
     // Smoothing agents for X and Y
     const smoothX = useRef(new DynamicSmoothingAgent(0.5));
     const smoothY = useRef(new DynamicSmoothingAgent(0.5));
 
-const toggleFilter = useCallback((isEnabled: boolean) => {
+    const toggleFilter = useCallback((isEnabled: boolean) => {
+        isSmoothingEnabledRef.current = isEnabled;
         if (ws.current?.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({ type: 'SET_FILTER', value: isEnabled }));
         }
@@ -41,6 +45,10 @@ const toggleFilter = useCallback((isEnabled: boolean) => {
 
             ws.current.onopen = () => {
                 console.log('Connected to Hand Controller');
+                // Sync initial state
+                if (ws.current?.readyState === WebSocket.OPEN) {
+                    ws.current.send(JSON.stringify({ type: 'SET_FILTER', value: isSmoothingEnabledRef.current }));
+                }
             };
 
             ws.current.onmessage = (event) => {
@@ -48,13 +56,21 @@ const toggleFilter = useCallback((isEnabled: boolean) => {
                     const parsed = JSON.parse(event.data);
                     if (parsed.detected !== undefined) {
 
-                        let finalX = 0.5;
-                        let finalY = 0.5;
+                        let finalX = parsed.x;
+                        let finalY = parsed.y;
 
                         if (parsed.detected) {
-                            // Apply smoothing
-                            finalX = smoothX.current.update(parsed.x);
-                            finalY = smoothY.current.update(parsed.y);
+                            if (isSmoothingEnabledRef.current) {
+                                // Apply smoothing
+                                finalX = smoothX.current.update(parsed.x);
+                                finalY = smoothY.current.update(parsed.y);
+                            } else {
+                                // Reset smoother to current value so it doesn't jump when re-enabled
+                                smoothX.current.reset(parsed.x);
+                                smoothY.current.reset(parsed.y);
+                                finalX = parsed.x;
+                                finalY = parsed.y;
+                            }
                         } else {
                             // If lost, maybe slowly drift to center or just hold?
                             // Let's hold last known or center. 
@@ -102,5 +118,5 @@ const toggleFilter = useCallback((isEnabled: boolean) => {
         };
     }, [url]);
 
-    return {data, toggleFilter};
+    return { data, toggleFilter };
 }
