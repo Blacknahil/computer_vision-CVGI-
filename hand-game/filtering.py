@@ -104,7 +104,7 @@ class HandFilterPipeline:
 
     def filter(self, raw_x, raw_y):
         # --- Stage 1: Median Filter (Removes Spikes) ---
-        print("applying filter....")
+        # print("applying filter....")
         self.x_buffer.append(raw_x)
         self.y_buffer.append(raw_y)
         

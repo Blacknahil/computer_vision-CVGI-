@@ -58,17 +58,19 @@ async def handler(websocket):
     global USE_FILTER
     print(f"Client connected: {websocket.remote_address}")
     
-    async for message in websocket:
+    async def listen_for_settings():
+        global USE_FILTER
         try:
-            data = json.loads(message)
-            if data.get("type") == "SET_FILTER":
-                USE_FILTER = data.get("value", True)
-                print(f"Set filtering to: {USE_FILTER}")
+            async for message in websocket:
+                data = json.loads(message)
+                if data.get("type") == "SET_FILTER":
+                    USE_FILTER = data.get("value", True)
+                    print(f"Set filtering to: {USE_FILTER}")
         
         except json.JSONDecodeError:
             print("Received non-JSON message, ignoring.")
-            continue
-    
+            
+    listener_task = asyncio.create_task(listen_for_settings())
     # --- MediaPipe Tasks Setup ---
     BaseOptions = mp.tasks.BaseOptions
     HandLandmarker = mp.tasks.vision.HandLandmarker
@@ -100,6 +102,7 @@ async def handler(websocket):
 
     landmarker = HandLandmarker.create_from_options(options)
     handfilter = HandFilterPipeline()
+    
 
     try:
         start_time = time.time()
