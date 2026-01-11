@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef,useCallback } from 'react';
 import { DynamicSmoothingAgent } from '../utils/smoother';
 
 export interface HandData {
@@ -25,8 +25,18 @@ export default function useHandControl(url: string = 'ws://localhost:8765') {
     const smoothX = useRef(new DynamicSmoothingAgent(0.5));
     const smoothY = useRef(new DynamicSmoothingAgent(0.5));
 
+const toggleFilter = useCallback((isEnabled: boolean) => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ type: 'SET_FILTER', value: isEnabled }));
+        }
+    }, []);
+
     useEffect(() => {
+        let isComponentMounted = true;
+
         function connect() {
+            if (!isComponentMounted) return;
+
             ws.current = new WebSocket(url);
 
             ws.current.onopen = () => {
@@ -80,6 +90,11 @@ export default function useHandControl(url: string = 'ws://localhost:8765') {
         }
 
         connect();
+        return () => {
+            isComponentMounted = false;
+            ws.current?.close();
+            clearTimeout(reconnectTimeout.current);
+        }
 
         return () => {
             ws.current?.close();
@@ -87,5 +102,5 @@ export default function useHandControl(url: string = 'ws://localhost:8765') {
         };
     }, [url]);
 
-    return data;
+    return {data, toggleFilter};
 }

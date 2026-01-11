@@ -3,6 +3,7 @@ import type { HandData } from '../hooks/useHandControl';
 
 interface GameCanvasProps {
     handData: HandData;
+    onToggleFilter: (isEnabled: boolean) => void;
 }
 
 interface Entity {
@@ -15,11 +16,12 @@ interface Entity {
     active: boolean;
 }
 
-export function GameCanvas({ handData }: GameCanvasProps) {
+export function GameCanvas({ handData, onToggleFilter }: GameCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [hudScore, setHudScore] = useState(0);
     const [hudGameOver, setHudGameOver] = useState(false);
     const [hasStarted, setHasStarted] = useState(false);
+    const [isFilterOn, setIsFilterOn] = useState(true);
 
     // Game State Refs (to avoid re-renders on every frame)
     const gameState = useRef({
@@ -40,6 +42,12 @@ export function GameCanvas({ handData }: GameCanvasProps) {
         enemy: new Image()
     });
     const spritesLoaded = useRef(false);
+
+    const handleBtnClick = () => {
+        const nextState = !isFilterOn;
+        setIsFilterOn(nextState);
+        onToggleFilter(nextState); // This calls the hook's toggleFilter
+    };
 
     useEffect(() => {
         sprites.current.ship.src = '/ship.png';
@@ -312,6 +320,25 @@ export function GameCanvas({ handData }: GameCanvasProps) {
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: 'black' }}>
+
+            <button 
+                onClick={handleBtnClick}
+                style={{
+                    position: 'absolute',
+                    top: '20px',
+                    left: '20px',
+                    zIndex: 10,
+                    padding: '10px',
+                    background: isFilterOn ? '#00ffcc' : '#ff4444',
+                    color: 'black',
+                    fontWeight: 'bold',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                }}
+            >
+                FILTER: {isFilterOn ? 'ON (Kalman and median filtering)' : 'OFF (Raw)'}
+            </button>
 
             <canvas
                 ref={canvasRef}

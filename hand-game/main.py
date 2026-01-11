@@ -8,15 +8,16 @@ import os
 import urllib.request
 import time
 import base64
-
+from filtering import HandFilterPipeline
 # --- Global Configuration ---
 PORT = 8765
 PINCH_THRESHOLD = 0.05 
 MODEL_PATH = 'hand_landmarker.task'
 MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+USE_FILTER = True
 
 def distance(p1, p2):
-    return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
+    return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
 def download_model():
     if not os.path.exists(MODEL_PATH):
@@ -54,7 +55,19 @@ def draw_landmarks_on_image(rgb_image, detection_result):
     return annotated_image
 
 async def handler(websocket):
+    global USE_FILTER
     print(f"Client connected: {websocket.remote_address}")
+    
+    async for message in websocket:
+        try:
+            data = json.loads(message)
+            if data.get("type") == "SET_FILTER":
+                USE_FILTER = data.get("value", True)
+                print(f"Set filtering to: {USE_FILTER}")
+        
+        except json.JSONDecodeError:
+            print("Received non-JSON message, ignoring.")
+            continue
     
     # --- MediaPipe Tasks Setup ---
     BaseOptions = mp.tasks.BaseOptions
@@ -86,6 +99,7 @@ async def handler(websocket):
     print("Streaming hand data...")
 
     landmarker = HandLandmarker.create_from_options(options)
+    handfilter = HandFilterPipeline()
 
     try:
         start_time = time.time()
@@ -127,13 +141,21 @@ async def handler(websocket):
                 hand_landmarks = detection_result.hand_landmarks[0]
                 index_tip = hand_landmarks[8]
                 thumb_tip = hand_landmarks[4]
-                
-                dist = distance(index_tip, thumb_tip)
+                # Apply filtering
+                if USE_FILTER:
+                    index_x, index_y = handfilter.filter(index_tip.x, index_tip.y)
+                    thumb_x, thumb_y = handfilter.filter(thumb_tip.x, thumb_tip.y)
+                else:
+                    index_x, index_y = index_tip.x, index_tip.y
+                    thumb_x, thumb_y = thumb_tip.x, thumb_tip.y
+                    
+                # Determine pinching
+                dist = distance((index_x,index_y), (thumb_x, thumb_y))
                 is_pinching = dist < PINCH_THRESHOLD
                 
                 data["detected"] = True
-                data["x"] = index_tip.x
-                data["y"] = index_tip.y
+                data["x"] = index_x
+                data["y"] = index_y
                 data["shooting"] = is_pinching
                 
                 # Draw landmarks on the frame for visualization
@@ -146,8 +168,8 @@ async def handler(websocket):
                 # Draw pinch line
                 if is_pinching:
                      cv2.line(frame, 
-                              (int(index_tip.x*w), int(index_tip.y*h)), 
-                              (int(thumb_tip.x*w), int(thumb_tip.y*h)), 
+                              (int(index_x*w), int(index_y*h)), 
+                              (int(thumb_x*w), int(thumb_y*h)), 
                               (0, 0, 255), 3)
 
             # Resize for transmission (reduce bandwidth)
